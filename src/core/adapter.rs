@@ -27,7 +27,7 @@ use reqwest::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-pub struct Scraper {
+pub struct Adapter {
     client: Client,
     cookies: Arc<Jar>,
 }
@@ -56,7 +56,7 @@ pub struct Test {
     pub(crate) explanation: Option<String>,
 }
 
-impl Scraper {
+impl Adapter {
     pub async fn init(timeout: u8) -> Result<Self> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(

@@ -17,6 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use std::env;
+
 use anyhow::Result;
 use clap::Parser;
 use colored::{self, Colorize};
@@ -25,7 +27,10 @@ use keyring::Entry;
 use log::{self, LevelFilter, trace, warn};
 use tokio;
 
-use crate::cli::{Cli, Commands};
+use crate::{
+    cli::{Cli, Commands},
+    core::{adapter::Adapter, git::ArtemisRepo},
+};
 pub mod cli;
 pub mod core;
 
@@ -47,7 +52,7 @@ fn init_log(verbosity: u8) {
 async fn run_commands(cli: Cli) -> Result<()> {
     match cli.command.unwrap() {
         Commands::ListCourses => {
-            let mut s = core::scraper::Scraper::init(30).await.unwrap();
+            let mut s = Adapter::init(30).await.unwrap();
 
             let courses = s.get_all_courses().await.unwrap();
             for course in courses {
@@ -55,7 +60,7 @@ async fn run_commands(cli: Cli) -> Result<()> {
             }
         }
         Commands::ListTasks { courseid } => {
-            let mut s = core::scraper::Scraper::init(30).await.unwrap();
+            let mut s = Adapter::init(30).await.unwrap();
 
             let courses = s.get_all_courses().await.unwrap();
             for course in courses {
@@ -79,9 +84,13 @@ async fn run_commands(cli: Cli) -> Result<()> {
         }
         Commands::StartTask { taskid } => {}
         Commands::Submit => {
-            let mut s = core::scraper::Scraper::init(30).await?;
+            let repo = ArtemisRepo::open(env::current_dir()?)?;
+            repo.commit_and_push();
+
+            let mut s = Adapter::init(30).await?;
             let taskid = 220; // TODO: this should be in read from a config file in the project dir
             let test_results = s.get_latest_test_result(taskid).await?;
+
             for test_result in test_results {
                 println!(
                     "{} {} {}",

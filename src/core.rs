@@ -1,1 +1,2 @@
-pub mod scraper;
+pub mod adapter;
+pub mod git;
