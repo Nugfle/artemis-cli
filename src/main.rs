@@ -83,13 +83,13 @@ async fn run_commands(cli: Cli) -> Result<()> {
             }
         }
         Commands::StartTask { taskid } => {}
-        Commands::Submit => {
+        Commands::Submit { taskid } => {
             let repo = ArtemisRepo::open(env::current_dir()?)?;
             repo.commit_and_push()?;
 
             let mut s = Adapter::init(30).await?;
-            let taskid = 220; // TODO: this should be in read from a config file in the project dir
-            let test_results = s.get_latest_test_result(taskid).await?;
+            let test_results = s.get_latest_test_result(taskid).await?; // TODO: make it so we get
+            // taskid from the local repository, no need for it to be speciefied
 
             for test_result in test_results {
                 println!(
@@ -100,7 +100,7 @@ async fn run_commands(cli: Cli) -> Result<()> {
                         "F".bold().red()
                     },
                     test_result.name,
-                    test_result.explanation.unwrap_or("".to_string()),
+                    test_result.explanation.unwrap_or("".to_string()).red(),
                 )
             }
         }

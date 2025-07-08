@@ -34,16 +34,19 @@ pub(crate) enum Commands {
     ListCourses,
     /// lists all available tasks on artemis
     ListTasks {
-        /// the id of the course as shown by ListCourses
+        /// the id of the course as shown by list-courses
         courseid: u64,
     },
     /// start artemis task and clone the gl repository
     StartTask {
-        /// the id of the task as given by listtask
+        /// the id of the task as given by list-task
         taskid: u64,
     },
     /// creates a commit, pushes to the repo and returns the test results
-    Submit,
+    Submit {
+        /// the id of the task as given by list-task
+        taskid: u64,
+    },
     /// sets the global configuration for login data
     Config {
         /// your artemis username

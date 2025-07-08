@@ -34,7 +34,7 @@ artemis-cli start-task [TASK ID]
 ```
 If you are finished and want to see the tests, you can run 
 ```
-artemis-cli submit
+artemis-cli submit [TASK ID]
 ```
 to automacily create a commit, push to the remote repository and fetch the updated test results for you.
 
