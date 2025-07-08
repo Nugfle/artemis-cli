@@ -17,7 +17,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use anyhow::Result;
 use clap::Parser;
+use colored::{self, Colorize};
 use env_logger;
 use keyring::Entry;
 use log::{self, LevelFilter, trace, warn};
@@ -42,18 +44,7 @@ fn init_log(verbosity: u8) {
         .init();
 }
 
-#[tokio::main]
-async fn main() {
-    let cli: Cli = Cli::parse();
-    init_log(cli.verbosity);
-
-    trace!("setup logging...");
-
-    if cli.command.is_none() {
-        warn!("command is none");
-        return;
-    }
-    trace!("parsing command...");
+async fn run_commands(cli: Cli) -> Result<()> {
     match cli.command.unwrap() {
         Commands::ListCourses => {
             let mut s = core::scraper::Scraper::init(30).await.unwrap();
@@ -71,14 +62,9 @@ async fn main() {
                 if course.id == courseid {
                     for task in course.tasks {
                         println!(
-                            "{:<5} {:<40} {:<15} {:<15}",
+                            "{:<5} {:<40} {:<15}",
                             task.id,
                             task.title,
-                            if task.is_active {
-                                "active"
-                            } else {
-                                "not started"
-                            },
                             if task.completed {
                                 "completed"
                             } else if task.is_active {
@@ -92,16 +78,50 @@ async fn main() {
             }
         }
         Commands::StartTask { taskid } => {}
-        Commands::Submit => {}
+        Commands::Submit => {
+            let mut s = core::scraper::Scraper::init(30).await?;
+            let taskid = 220; // TODO: this should be in read from a config file in the project dir
+            let test_results = s.get_latest_test_result(taskid).await?;
+            for test_result in test_results {
+                println!(
+                    "{} {} {}",
+                    if test_result.passed {
+                        "P".bold().green()
+                    } else {
+                        "F".bold().red()
+                    },
+                    test_result.name,
+                    test_result.explanation.unwrap_or("".to_string()),
+                )
+            }
+        }
         Commands::Config { username, password } => {
             if username.is_some() {
-                let uname = Entry::new("artemiscli", "username").unwrap();
-                uname.set_password(&username.unwrap()).unwrap();
+                let uname =
+                    Entry::new("artemiscli", "username").expect("can't create Entry for username");
+                uname
+                    .set_password(&username.unwrap())
+                    .expect("can't create Entry for password");
             }
             if password.is_some() {
-                let pwd = Entry::new("artemiscli", "password").unwrap();
-                pwd.set_password(&password.unwrap()).unwrap();
+                let pwd = Entry::new("artemiscli", "password")?;
+                pwd.set_password(&password.unwrap())?;
             }
         }
     }
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    let cli: Cli = Cli::parse();
+    init_log(cli.verbosity);
+
+    trace!("setup logging...");
+
+    if cli.command.is_none() {
+        warn!("command is none");
+        return;
+    }
+    run_commands(cli).await.unwrap();
 }

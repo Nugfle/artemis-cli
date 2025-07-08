@@ -1,18 +1,19 @@
 [package]
 name = "artemis-cli"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "GPL-3.0"
 description = "A CLI tool to interact with Artemis exercises." 
 
 [dependencies]
 anyhow = "1.0.98"
+chrono = "0.4.41"
 clap = { version = "4.5.40", features = ["derive"] }
+colored = "3.0.0"
 env_logger = "0.11.8"
 keyring = { version = "3.6.2", features = ["apple-native", "windows-native", "sync-secret-service"] }
 log = "0.4.27"
 reqwest = { version = "0.12.22", features = ["cookies", "json"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-serde_yaml = "0.9.34"
 tokio = { version = "1.46.1", features = ["full"] }
