@@ -21,6 +21,12 @@ impl ArtemisRepo {
     }
 
     pub fn commit_and_push(&self) -> Result<()> {
+        self.commit()?;
+        self.push()?;
+        Ok(())
+    }
+
+    pub fn commit(&self) -> Result<()> {
         let mut index = self.repo.index()?;
 
         trace!("indexing files...");
@@ -56,8 +62,6 @@ impl ArtemisRepo {
             &[&parent],
         )?;
         info!("successfully commited {}", commit_id);
-
-        self.push()?;
 
         Ok(())
     }

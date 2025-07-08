@@ -85,7 +85,7 @@ async fn run_commands(cli: Cli) -> Result<()> {
         Commands::StartTask { taskid } => {}
         Commands::Submit => {
             let repo = ArtemisRepo::open(env::current_dir()?)?;
-            repo.commit_and_push();
+            repo.commit_and_push()?;
 
             let mut s = Adapter::init(30).await?;
             let taskid = 220; // TODO: this should be in read from a config file in the project dir

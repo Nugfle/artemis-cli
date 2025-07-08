@@ -14,10 +14,15 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-use std::{sync::Arc, time::Duration};
+use std::{
+    fmt::{Display, write},
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Result, anyhow};
-use chrono::DateTime;
+use chrono::{DateTime, FixedOffset};
+use colored::Colorize;
 use keyring::Entry;
 use log::{debug, error, info, trace};
 use reqwest::{
@@ -54,6 +59,32 @@ pub struct Test {
     pub(crate) name: String,
     pub(crate) passed: bool,
     pub(crate) explanation: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct LogStatement {
+    pub(crate) id: u64,
+    pub(crate) time: DateTime<FixedOffset>,
+    pub(crate) log: String,
+}
+
+impl Display for LogStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write(
+            f,
+            format_args!(
+                "{:<30} {}",
+                self.time,
+                if self.log[0..7] == *"[ERROR]" {
+                    self.log.red()
+                } else if self.log[0..6] == *"[INFO]" {
+                    self.log.bright_blue()
+                } else {
+                    self.log.normal()
+                }
+            ),
+        )
+    }
 }
 
 impl Adapter {
@@ -275,7 +306,7 @@ impl Adapter {
         Ok(course_list)
     }
 
-    fn parse_exercise_details(text: &str) -> Result<(u64, u64)> {
+    fn parse_exercise_details(text: &str) -> Result<(u64, u64, bool)> {
         let mut deserializer = serde_json::Deserializer::from_str(text);
         let json = Value::deserialize(&mut deserializer)?;
         let exercise = json.get("exercise").unwrap();
@@ -299,14 +330,23 @@ impl Adapter {
             let result_id = result.get("id").unwrap().as_u64().unwrap();
             let completion_time = result.get("completionDate").unwrap().as_str().unwrap();
             let timestamp = DateTime::parse_from_rfc3339(completion_time).unwrap();
-            submissions.push((timestamp, result_id));
+
+            let build_failiure = result
+                .get("submission")
+                .unwrap()
+                .get("buildFailed")
+                .unwrap()
+                .as_bool()
+                .unwrap();
+
+            submissions.push((timestamp, result_id, build_failiure));
         }
-        let (_, submission_id) = submissions
+        let (_, resutl_id, build_faliure) = submissions
             .iter()
-            .max_by(|(ts1, _), (ts2, _)| ts1.cmp(ts2))
+            .max_by(|(ts1, _, _), (ts2, _, _)| ts1.cmp(ts2))
             .unwrap();
 
-        Ok((participation_id, *submission_id))
+        Ok((participation_id, *resutl_id, *build_faliure))
     }
 
     fn parse_test_result_details(text: String) -> Result<Vec<Test>> {
@@ -356,11 +396,29 @@ impl Adapter {
         );
         let text = self.fetch_json(&details_uri).await?.text().await?;
 
-        let (participation_id, submission_id) = Self::parse_exercise_details(&text).unwrap();
+        let (participation_id, result_id, build_failiure) =
+            Self::parse_exercise_details(&text).unwrap();
+
+        if build_failiure {
+            let buildlogs_url = format!(
+                "https://artemis-app.inf.tu-dresden.de/api/repository/{}/buildlogs?resultId={}",
+                participation_id, result_id
+            );
+
+            let buildlogs: Vec<LogStatement> =
+                self.fetch_json(&buildlogs_url).await?.json().await?;
+
+            println!("{}", "BUILD FAILIURE:".red().bold());
+            for log in buildlogs {
+                println!("{}", log);
+            }
+
+            return Ok(Vec::new());
+        }
 
         let test_result_uri = format!(
             "https://artemis-app.inf.tu-dresden.de/api/participations/{}/results/{}/details",
-            participation_id, submission_id,
+            participation_id, result_id,
         );
 
         let test_result_text = self.fetch_json(&test_result_uri).await?.text().await?;
