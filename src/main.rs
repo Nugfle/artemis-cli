@@ -82,7 +82,18 @@ async fn run_commands(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Commands::StartTask { taskid } => {}
+        Commands::StartTask { taskid } => {
+            let mut s = Adapter::init(30)
+                .await
+                .expect("adapter could not be started");
+            let ssh_uri = s
+                .srart_artemis_task(taskid)
+                .await
+                .expect("couldnt start the task and fetch url");
+            let repo = ArtemisRepo::create(&ssh_uri).expect("couldn't create the repository");
+            repo.commit_and_push()
+                .expect("can't commit and push to remote repository");
+        }
         Commands::Submit { taskid } => {
             let repo = ArtemisRepo::open(env::current_dir()?)?;
             repo.commit_and_push()?;

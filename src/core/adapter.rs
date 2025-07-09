@@ -37,13 +37,12 @@ pub struct Adapter {
     cookies: Arc<Jar>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Task {
     pub(crate) title: String,
     pub(crate) id: u64,
     pub(crate) is_active: bool,
     pub(crate) completed: bool,
-    pub(crate) repo_uri: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -101,9 +100,11 @@ impl Adapter {
                 .unwrap(),
         );
 
+        // jar holds onto our cookies
         let jar = Arc::new(Jar::default());
         let entry =
             Entry::new("artemiscli", "jwt-token").expect("cant create keyring entry for jwt token");
+
         let mut restored_cookie = false;
         if let Ok(cookie) = entry.get_password() {
             jar.add_cookie_str(
@@ -126,6 +127,7 @@ impl Adapter {
             cookies: jar,
         };
 
+        // if we weren't able to restore our old cookie, we create a new one by logging in again
         if !restored_cookie {
             s.login().await?;
         }
@@ -153,7 +155,9 @@ impl Adapter {
 
         if response.status().is_success() {
             info!("succesfully logged in");
+
             let entry = Entry::new("artemiscli", "jwt-token")?;
+            // save the cookie for later use
             entry
                 .set_password(
                     self.cookies
@@ -173,7 +177,7 @@ impl Adapter {
 
     fn parse_task(raw_task: &Value) -> Result<Task> {
         let task_id = raw_task.get("id").unwrap().as_u64().unwrap();
-        let task_title = raw_task.get("title").unwrap().as_str().unwrap().to_string();
+        let task_title = raw_task.get("title").unwrap().to_string();
         let active = raw_task.get("studentParticipations");
 
         if active.is_none() {
@@ -182,7 +186,6 @@ impl Adapter {
                 completed: false,
                 id: task_id,
                 title: task_title,
-                repo_uri: None,
             };
             return Ok(task);
         }
@@ -195,19 +198,11 @@ impl Adapter {
             .first()
             .unwrap();
 
-        let repo_uri = participation_info
-            .get("repositoryUri")
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string();
-
         if participation_info.get("results").is_none() {
             let task = Task {
                 title: task_title,
                 id: task_id,
                 completed: false,
-                repo_uri: Some(repo_uri),
                 is_active: true,
             };
             return Ok(task);
@@ -227,7 +222,6 @@ impl Adapter {
             title: task_title,
             id: task_id,
             completed,
-            repo_uri: Some(repo_uri),
             is_active: true,
         };
         return Ok(task);
@@ -235,7 +229,7 @@ impl Adapter {
 
     fn parse_course(course: &Value) -> Result<Course> {
         trace!("parsing course ... ");
-        let course_title = course.get("title").unwrap().as_str().unwrap().to_string();
+        let course_title = course.get("title").unwrap().to_string();
 
         let course_id = course.get("id").unwrap().as_u64().unwrap();
 
@@ -247,12 +241,7 @@ impl Adapter {
             tasks.push(Self::parse_task(raw_task).unwrap());
         }
 
-        let description = course
-            .get("description")
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string();
+        let description = course.get("description").unwrap().to_string();
 
         Ok(Course {
             description,
@@ -363,18 +352,9 @@ impl Adapter {
                 .unwrap()
                 .get("testName")
                 .unwrap()
-                .as_str()
-                .unwrap()
                 .to_string();
             let explanation = if !passed {
-                Some(
-                    raw_test
-                        .get("detailText")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                )
+                Some(raw_test.get("detailText").unwrap().to_string())
             } else {
                 None
             };
@@ -424,5 +404,38 @@ impl Adapter {
         let test_result_text = self.fetch_json(&test_result_uri).await?.text().await?;
 
         Self::parse_test_result_details(test_result_text.to_owned())
+    }
+
+    pub async fn srart_artemis_task(&mut self, taskid: u64) -> Result<String> {
+        let participations_url = format!(
+            "https://artemis-app.inf.tu-dresden.de/api/exercises/{}/participations",
+            taskid
+        );
+        let response = self
+            .client
+            .post(&participations_url)
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            self.login().await?;
+        }
+
+        if !response.status().is_success() {
+            error!("coudn't start new task {} ", response.status());
+            return Err(anyhow!("coudn't start new task {}", response.status()));
+        }
+
+        let text = response.text().await.expect("cant read response body");
+        let mut deserializer = serde_json::Deserializer::from_str(&text);
+        let json = Value::deserialize(&mut deserializer)?;
+
+        let repo_uri = json.get("repositoryUri").unwrap().to_string();
+        let suffix = repo_uri.split_once("@").expect("uri didn't contain '@'").1;
+        let mut prefix = "ssh://git@".to_string();
+        prefix.push_str(suffix);
+
+        Ok(prefix)
     }
 }

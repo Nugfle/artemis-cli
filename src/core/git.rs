@@ -1,6 +1,9 @@
 use anyhow::Result;
-use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
-use log::{info, trace};
+use git2::{
+    Cred, CredentialType, FetchOptions, PushOptions, RemoteCallbacks, Repository, Signature,
+    build::RepoBuilder,
+};
+use log::{error, info, trace};
 use std::{env, path::Path};
 
 pub struct ArtemisRepo {
@@ -9,9 +12,65 @@ pub struct ArtemisRepo {
 
 impl ArtemisRepo {
     pub fn create(url: &str) -> Result<Self> {
-        let repo = Repository::clone(url, env::current_dir()?)?;
+        let mut path = env::current_dir().expect("can't access current directory");
+        path.push("artemis-task");
+
+        // Remove existing directory if it exists
+        if path.exists() {
+            std::fs::remove_dir_all(&path).unwrap();
+        }
+
+        info!("start cloning: {} into {}...", url, path.to_str().unwrap());
+
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|url, username_from_url, allowed_types| {
+            info!("Credential callback called for URL: {}", url);
+            info!("Username from URL: {:?}", username_from_url);
+            info!("Allowed types: {:?}", allowed_types);
+
+            if allowed_types.contains(CredentialType::SSH_KEY) {
+                let username = username_from_url.unwrap_or("git");
+                info!("Trying SSH key authentication for user: {}", username);
+                Cred::ssh_key_from_agent(username)
+            } else if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
+                // For HTTPS URLs, you might need username/password or token
+                error!("Password authentication not implemented");
+                Err(git2::Error::from_str(
+                    "password authentication not implemented",
+                ))
+            } else {
+                error!(
+                    "No supported credential type available: {:?}",
+                    allowed_types
+                );
+                Err(git2::Error::from_str("no supported credential type"))
+            }
+        });
+
+        let mut fo = FetchOptions::new();
+        fo.remote_callbacks(callbacks);
+
+        let mut builder = RepoBuilder::new();
+        builder.fetch_options(fo);
+        builder.branch("main");
+
+        let repo = builder.clone(url, &path).map_err(|e| {
+            error!("Failed to clone repository: {}", e);
+            // Print more detailed error information
+            match e.class() {
+                git2::ErrorClass::Net => error!("Network error - check your connection and URL"),
+                git2::ErrorClass::Ssh => {
+                    error!("SSH error - check your SSH key and authentication")
+                }
+                git2::ErrorClass::Http => error!("HTTP error - check your credentials and URL"),
+                _ => error!("Other git error: {:?}", e.class()),
+            }
+            e
+        })?;
+
         Ok(Self { repo })
     }
+
     pub fn open<T>(path: T) -> Result<Self>
     where
         T: AsRef<Path>,
