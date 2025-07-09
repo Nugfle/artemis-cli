@@ -2,7 +2,7 @@
 
 **A tool designed to make the lives of students easier when working with the online learning platform [Artemis](https://github.com/ls1intum/Artemis).**
 
-ArtemisCLI gives you full control to start and manage exercises from your command line.
+ArtemisCLI gives you full control to start and manage exercises from your command line. It has currently only been tested on Linux and with the Artemis server hosted by TU Dresden.
 
 ## Getting started
 
@@ -11,11 +11,16 @@ To get started you need to have [rust](https://www.rust-lang.org/) installed. Yo
 cargo install artemis-cli
 ```
 
-## Setting up Authentication
+## Setup
 
 To set up your login information simply run 
 ```
-artemis-cli config [YOUR USERNAME] [YOUR PASSWORD]
+artemis-cli config username [YOUR USERNAME]
+artemis-cli config password [YOUR PASSWORD]
+```
+To configure the base url of the Artemis server run:
+```
+artemis-cli config base-url [BASE URL]
 ```
 
 ## Working with ArtemisCLI

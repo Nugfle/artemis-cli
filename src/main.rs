@@ -92,7 +92,8 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
                 .srart_artemis_task(*taskid)
                 .await
                 .expect("couldnt start the task and fetch url");
-            let repo = ArtemisRepo::create(&ssh_uri).expect("couldn't create the repository");
+            let repo =
+                ArtemisRepo::create(&ssh_uri, *taskid).expect("couldn't create the repository");
             repo.commit_and_push()
                 .expect("can't commit and push to remote repository");
         }
