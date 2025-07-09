@@ -28,11 +28,13 @@ use log::{self, LevelFilter, trace, warn};
 use tokio;
 
 use crate::{
-    cli::{Cli, Commands},
+    cli::{Cli, Commands, ConfigCommands},
+    config::ArtemisConfig,
     core::{adapter::Adapter, git::ArtemisRepo},
 };
-pub mod cli;
-pub mod core;
+mod cli;
+mod config;
+mod core;
 
 fn init_log(verbosity: u8) {
     let log_level = match verbosity {
@@ -49,10 +51,10 @@ fn init_log(verbosity: u8) {
         .init();
 }
 
-async fn run_commands(cli: Cli) -> Result<()> {
-    match cli.command.unwrap() {
+async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
+    match cli.command.as_ref().unwrap() {
         Commands::ListCourses => {
-            let mut s = Adapter::init(30).await.unwrap();
+            let mut s = Adapter::init(30, cfg.get_base_url()).await.unwrap();
 
             let courses = s.get_all_courses().await.unwrap();
             for course in courses {
@@ -60,11 +62,11 @@ async fn run_commands(cli: Cli) -> Result<()> {
             }
         }
         Commands::ListTasks { courseid } => {
-            let mut s = Adapter::init(30).await.unwrap();
+            let mut s = Adapter::init(30, cfg.get_base_url()).await.unwrap();
 
             let courses = s.get_all_courses().await.unwrap();
             for course in courses {
-                if course.id == courseid {
+                if course.id == *courseid {
                     for task in course.tasks {
                         println!(
                             "{:<5} {:<40} {:<15}",
@@ -83,11 +85,11 @@ async fn run_commands(cli: Cli) -> Result<()> {
             }
         }
         Commands::StartTask { taskid } => {
-            let mut s = Adapter::init(30)
+            let mut s = Adapter::init(30, cfg.get_base_url())
                 .await
                 .expect("adapter could not be started");
             let ssh_uri = s
-                .srart_artemis_task(taskid)
+                .srart_artemis_task(*taskid)
                 .await
                 .expect("couldnt start the task and fetch url");
             let repo = ArtemisRepo::create(&ssh_uri).expect("couldn't create the repository");
@@ -98,8 +100,8 @@ async fn run_commands(cli: Cli) -> Result<()> {
             let repo = ArtemisRepo::open(env::current_dir()?)?;
             repo.commit_and_push()?;
 
-            let mut s = Adapter::init(30).await?;
-            let test_results = s.get_latest_test_result(taskid).await?; // TODO: make it so we get
+            let mut s = Adapter::init(30, cfg.get_base_url()).await?;
+            let test_results = s.get_latest_test_result(*taskid).await?; // TODO: make it so we get
             // taskid from the local repository, no need for it to be speciefied
 
             for test_result in test_results {
@@ -115,19 +117,24 @@ async fn run_commands(cli: Cli) -> Result<()> {
                 )
             }
         }
-        Commands::Config { username, password } => {
-            if username.is_some() {
+        Commands::Config { command } => match command {
+            ConfigCommands::BaseUrl { url } => {
+                cfg.set_base_url(url.clone());
+                cfg.save(cli.cfg.as_deref());
+            }
+            ConfigCommands::Username { name } => {
                 let uname =
                     Entry::new("artemiscli", "username").expect("can't create Entry for username");
                 uname
-                    .set_password(&username.unwrap())
+                    .set_password(&name)
                     .expect("can't create Entry for password");
             }
-            if password.is_some() {
-                let pwd = Entry::new("artemiscli", "password")?;
-                pwd.set_password(&password.unwrap())?;
+            ConfigCommands::Password { password } => {
+                let pwd =
+                    Entry::new("artemiscli", "password").expect("can't create Entry for password");
+                pwd.set_password(&password)?;
             }
-        }
+        },
     }
     Ok(())
 }
@@ -137,11 +144,13 @@ async fn main() {
     let cli: Cli = Cli::parse();
     init_log(cli.verbosity);
 
+    let mut config = ArtemisConfig::load(cli.cfg.as_deref());
+
     trace!("setup logging...");
 
     if cli.command.is_none() {
         warn!("command is none");
         return;
     }
-    run_commands(cli).await.unwrap();
+    run_commands(&cli, &mut config).await.unwrap();
 }

@@ -16,11 +16,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 use std::{
     fmt::{Display, write},
+    path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, FixedOffset};
 use colored::Colorize;
 use keyring::Entry;
@@ -35,6 +37,7 @@ use serde_json::{Value, json};
 pub struct Adapter {
     client: Client,
     cookies: Arc<Jar>,
+    base_url: String,
 }
 
 #[derive(Clone, Debug)]
@@ -87,7 +90,7 @@ impl Display for LogStatement {
 }
 
 impl Adapter {
-    pub async fn init(timeout: u8) -> Result<Self> {
+    pub async fn init(timeout: u8, base_url: &str) -> Result<Self> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::USER_AGENT,
@@ -107,10 +110,7 @@ impl Adapter {
 
         let mut restored_cookie = false;
         if let Ok(cookie) = entry.get_password() {
-            jar.add_cookie_str(
-                &cookie,
-                &reqwest::Url::parse("https://artemis-app.inf.tu-dresden.de").unwrap(),
-            );
+            jar.add_cookie_str(&cookie, &reqwest::Url::parse(base_url).unwrap());
             restored_cookie = true;
         }
 
@@ -125,14 +125,33 @@ impl Adapter {
         let mut s = Self {
             client,
             cookies: jar,
+            base_url: base_url.to_owned(),
         };
 
         // if we weren't able to restore our old cookie, we create a new one by logging in again
         if !restored_cookie {
-            s.login().await?;
+            s.login().await.expect("Login failed");
         }
 
         Ok(s)
+    }
+
+    async fn fetch_json(&mut self, uri: &str) -> Result<Response> {
+        let response = self
+            .client
+            .get(uri)
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            self.login().await?;
+        }
+        if !response.status().is_success() {
+            error!("coudn't fetch json from {}", uri);
+            return Err(anyhow!("coudn't fetch json from {}", uri));
+        }
+        Ok(response)
     }
 
     pub async fn login(&mut self) -> Result<()> {
@@ -146,12 +165,14 @@ impl Adapter {
             "password": pwd.get_password().expect("you havent configured a password yet, use 'artemis-cli config [USERNAME] [PASSWORD]' and try again"),
             "rememberMe": true,
         });
+
         let response = self
             .client
             .post("https://artemis-app.inf.tu-dresden.de/api/public/authenticate")
             .json(&auth)
             .send()
-            .await?;
+            .await
+            .expect("can't send authentication request");
 
         if response.status().is_success() {
             info!("succesfully logged in");
@@ -161,13 +182,11 @@ impl Adapter {
             entry
                 .set_password(
                     self.cookies
-                        .cookies(&reqwest::Url::parse(
-                            "https://artemis-app.inf.tu-dresden.de",
-                        )?)
-                        .unwrap()
+                        .cookies(&reqwest::Url::parse(self.base_url.as_str()).unwrap())
+                        .expect("no cookies found for artemis")
                         .to_str()?,
                 )
-                .unwrap();
+                .expect("can't access keyring");
             Ok(())
         } else {
             error!("cant log in to artemis {:?}", response.status());
@@ -175,6 +194,99 @@ impl Adapter {
         }
     }
 
+    pub async fn get_all_courses(&mut self) -> Result<Vec<Course>> {
+        debug!("fetching course names...");
+
+        let text = self
+            .fetch_json(format!("{}/api/courses/for-dashboard", self.base_url).as_str())
+            .await?
+            .text()
+            .await?;
+
+        let mut deserializer = serde_json::Deserializer::from_str(&text);
+        let json = Value::deserialize(&mut deserializer)?;
+
+        trace!("start deserializing courses page...");
+        let courses = json.get("courses").unwrap();
+        let raw_course_array = courses.as_array().unwrap();
+
+        let mut course_list = Vec::new();
+
+        for course_info in raw_course_array {
+            let course = course_info.get("course").unwrap();
+            course_list.push(Self::parse_course(course).unwrap());
+        }
+
+        Ok(course_list)
+    }
+
+    pub async fn get_latest_test_result(&mut self, taskid: u64) -> Result<Vec<Test>> {
+        let details_uri = format!("{}/api/exercises/{}/details", self.base_url, taskid);
+        let text = self.fetch_json(&details_uri).await?.text().await?;
+
+        let (participation_id, result_id, build_failiure) =
+            Self::parse_exercise_details(&text).unwrap();
+
+        if build_failiure {
+            let buildlogs_url = format!(
+                "{}/api/repository/{}/buildlogs?resultId={}",
+                self.base_url, participation_id, result_id
+            );
+
+            let buildlogs: Vec<LogStatement> =
+                self.fetch_json(&buildlogs_url).await?.json().await?;
+
+            println!("{}", "BUILD FAILIURE:".red().bold());
+            for log in buildlogs {
+                println!("{}", log);
+            }
+
+            return Ok(Vec::new());
+        }
+
+        let test_result_uri = format!(
+            "{}/api/participations/{}/results/{}/details",
+            self.base_url, participation_id, result_id,
+        );
+
+        let test_result_text = self.fetch_json(&test_result_uri).await?.text().await?;
+
+        Self::parse_test_result_details(test_result_text.to_owned())
+    }
+
+    pub async fn srart_artemis_task(&mut self, taskid: u64) -> Result<String> {
+        let participations_url =
+            format!("{}/api/exercises/{}/participations", self.base_url, taskid);
+        let response = self
+            .client
+            .post(&participations_url)
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            self.login().await?;
+        }
+
+        if !response.status().is_success() {
+            error!("coudn't start new task {} ", response.status());
+            return Err(anyhow!("coudn't start new task {}", response.status()));
+        }
+
+        let text = response.text().await.expect("cant read response body");
+        let mut deserializer = serde_json::Deserializer::from_str(&text);
+        let json = Value::deserialize(&mut deserializer)?;
+
+        let repo_uri = json.get("repositoryUri").unwrap().to_string();
+        let suffix = repo_uri.split_once("@").expect("uri didn't contain '@'").1;
+        let mut prefix = "ssh://git@".to_string();
+        prefix.push_str(suffix);
+
+        Ok(prefix)
+    }
+}
+
+impl Adapter {
     fn parse_task(raw_task: &Value) -> Result<Task> {
         let task_id = raw_task.get("id").unwrap().as_u64().unwrap();
         let task_title = raw_task.get("title").unwrap().to_string();
@@ -250,51 +362,6 @@ impl Adapter {
             tasks,
         })
     }
-
-    async fn fetch_json(&mut self, uri: &str) -> Result<Response> {
-        let response = self
-            .client
-            .get(uri)
-            .header("Accept", "application/json")
-            .send()
-            .await?;
-
-        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-            self.login().await?;
-        }
-        if !response.status().is_success() {
-            error!("coudn't fetch json from {}", uri);
-            return Err(anyhow!("coudn't fetch json from {}", uri));
-        }
-        Ok(response)
-    }
-
-    pub async fn get_all_courses(&mut self) -> Result<Vec<Course>> {
-        debug!("fetching course names...");
-
-        let text = self
-            .fetch_json("https://artemis-app.inf.tu-dresden.de/api/courses/for-dashboard")
-            .await?
-            .text()
-            .await?;
-
-        let mut deserializer = serde_json::Deserializer::from_str(&text);
-        let json = Value::deserialize(&mut deserializer)?;
-
-        trace!("start deserializing courses page...");
-        let courses = json.get("courses").unwrap();
-        let raw_course_array = courses.as_array().unwrap();
-
-        let mut course_list = Vec::new();
-
-        for course_info in raw_course_array {
-            let course = course_info.get("course").unwrap();
-            course_list.push(Self::parse_course(course).unwrap());
-        }
-
-        Ok(course_list)
-    }
-
     fn parse_exercise_details(text: &str) -> Result<(u64, u64, bool)> {
         let mut deserializer = serde_json::Deserializer::from_str(text);
         let json = Value::deserialize(&mut deserializer)?;
@@ -367,75 +434,5 @@ impl Adapter {
         }
 
         Ok(tests)
-    }
-
-    pub async fn get_latest_test_result(&mut self, taskid: u64) -> Result<Vec<Test>> {
-        let details_uri = format!(
-            "https://artemis-app.inf.tu-dresden.de/api/exercises/{}/details",
-            taskid
-        );
-        let text = self.fetch_json(&details_uri).await?.text().await?;
-
-        let (participation_id, result_id, build_failiure) =
-            Self::parse_exercise_details(&text).unwrap();
-
-        if build_failiure {
-            let buildlogs_url = format!(
-                "https://artemis-app.inf.tu-dresden.de/api/repository/{}/buildlogs?resultId={}",
-                participation_id, result_id
-            );
-
-            let buildlogs: Vec<LogStatement> =
-                self.fetch_json(&buildlogs_url).await?.json().await?;
-
-            println!("{}", "BUILD FAILIURE:".red().bold());
-            for log in buildlogs {
-                println!("{}", log);
-            }
-
-            return Ok(Vec::new());
-        }
-
-        let test_result_uri = format!(
-            "https://artemis-app.inf.tu-dresden.de/api/participations/{}/results/{}/details",
-            participation_id, result_id,
-        );
-
-        let test_result_text = self.fetch_json(&test_result_uri).await?.text().await?;
-
-        Self::parse_test_result_details(test_result_text.to_owned())
-    }
-
-    pub async fn srart_artemis_task(&mut self, taskid: u64) -> Result<String> {
-        let participations_url = format!(
-            "https://artemis-app.inf.tu-dresden.de/api/exercises/{}/participations",
-            taskid
-        );
-        let response = self
-            .client
-            .post(&participations_url)
-            .header("Accept", "application/json")
-            .send()
-            .await?;
-
-        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-            self.login().await?;
-        }
-
-        if !response.status().is_success() {
-            error!("coudn't start new task {} ", response.status());
-            return Err(anyhow!("coudn't start new task {}", response.status()));
-        }
-
-        let text = response.text().await.expect("cant read response body");
-        let mut deserializer = serde_json::Deserializer::from_str(&text);
-        let json = Value::deserialize(&mut deserializer)?;
-
-        let repo_uri = json.get("repositoryUri").unwrap().to_string();
-        let suffix = repo_uri.split_once("@").expect("uri didn't contain '@'").1;
-        let mut prefix = "ssh://git@".to_string();
-        prefix.push_str(suffix);
-
-        Ok(prefix)
     }
 }

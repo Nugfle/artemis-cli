@@ -14,7 +14,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+
 use clap::{Parser, Subcommand, command};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "artemiscli")]
@@ -23,6 +25,9 @@ pub(crate) struct Cli {
     /// Verbosity of the output (use -v -vv -vvv to increase verbosity)
     #[arg(short, long, action = clap::ArgAction::Count)]
     pub(crate) verbosity: u8,
+
+    #[arg(short, long)]
+    pub(crate) cfg: Option<PathBuf>,
 
     #[command(subcommand)]
     pub(crate) command: Option<Commands>,
@@ -49,9 +54,14 @@ pub(crate) enum Commands {
     },
     /// sets the global configuration for login data
     Config {
-        /// your artemis username
-        username: Option<String>,
-        /// your artemis password
-        password: Option<String>,
+        #[command(subcommand)]
+        command: ConfigCommands,
     },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum ConfigCommands {
+    Username { name: String },
+    Password { password: String },
+    BaseUrl { url: String },
 }
