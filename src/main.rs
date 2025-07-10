@@ -107,7 +107,7 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
 
             for test_result in test_results {
                 println!(
-                    "{:<4} {:<120} {}",
+                    "{:<4} {:<60} {}",
                     if test_result.passed {
                         "P".bold().green()
                     } else {
