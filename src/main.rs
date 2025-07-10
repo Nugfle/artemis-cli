@@ -17,21 +17,15 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::{
-    env,
-    os::unix::thread,
-    thread::sleep,
-    time::{self, Duration},
-};
+use std::{env, thread::sleep, time::Duration};
 
 use anyhow::Result;
-use chrono::Duration;
 use clap::Parser;
 use colored::{self, Colorize};
 use env_logger;
 use keyring::Entry;
 use log::{self, LevelFilter, trace, warn};
-use tokio::{self, time::sleep};
+use tokio;
 
 use crate::{
     cli::{Cli, Commands, ConfigCommands},
