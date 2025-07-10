@@ -17,15 +17,21 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::env;
+use std::{
+    env,
+    os::unix::thread,
+    thread::sleep,
+    time::{self, Duration},
+};
 
 use anyhow::Result;
+use chrono::Duration;
 use clap::Parser;
 use colored::{self, Colorize};
 use env_logger;
 use keyring::Entry;
 use log::{self, LevelFilter, trace, warn};
-use tokio;
+use tokio::{self, time::sleep};
 
 use crate::{
     cli::{Cli, Commands, ConfigCommands},
@@ -100,14 +106,14 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
         Commands::Submit { taskid } => {
             let repo = ArtemisRepo::open(env::current_dir()?)?;
             repo.commit_and_push()?;
-
+            sleep(Duration::from_secs(7));
             let mut s = Adapter::init(30, cfg.get_base_url()).await?;
             let test_results = s.get_latest_test_result(*taskid).await?; // TODO: make it so we get
             // taskid from the local repository, no need for it to be speciefied
 
             for test_result in test_results {
                 println!(
-                    "{} {} {}",
+                    "{:<4} {:<120} {}",
                     if test_result.passed {
                         "P".bold().green()
                     } else {
