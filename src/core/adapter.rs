@@ -16,13 +16,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 use std::{
     fmt::{Display, write},
-    path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
     time::Duration,
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, FixedOffset};
 use colored::Colorize;
 use keyring::Entry;
@@ -52,7 +50,6 @@ pub struct Task {
 pub struct Course {
     pub(crate) id: u64,
     pub(crate) title: String,
-    pub(crate) description: String,
     pub(crate) tasks: Vec<Task>,
 }
 
@@ -65,7 +62,6 @@ pub struct Test {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct LogStatement {
-    pub(crate) id: u64,
     pub(crate) time: DateTime<FixedOffset>,
     pub(crate) log: String,
 }
@@ -105,8 +101,7 @@ impl Adapter {
 
         // jar holds onto our cookies
         let jar = Arc::new(Jar::default());
-        let entry =
-            Entry::new("artemiscli", "jwt-token").expect("cant create keyring entry for jwt token");
+        let entry = Entry::new("artemiscli", "jwt-token").expect("cant create keyring entry for jwt token");
 
         let mut restored_cookie = false;
         if let Ok(cookie) = entry.get_password() {
@@ -137,12 +132,7 @@ impl Adapter {
     }
 
     async fn fetch_json(&mut self, uri: &str) -> Result<Response> {
-        let response = self
-            .client
-            .get(uri)
-            .header("Accept", "application/json")
-            .send()
-            .await?;
+        let response = self.client.get(uri).header("Accept", "application/json").send().await?;
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             self.login().await?;
@@ -155,10 +145,8 @@ impl Adapter {
     }
 
     pub async fn login(&mut self) -> Result<()> {
-        let uname =
-            Entry::new("artemiscli", "username").expect("cant create keyring entry for username");
-        let pwd =
-            Entry::new("artemiscli", "password").expect("cant create keyring entry for password");
+        let uname = Entry::new("artemiscli", "username").expect("cant create keyring entry for username");
+        let pwd = Entry::new("artemiscli", "password").expect("cant create keyring entry for password");
 
         let auth = json!({
             "username": uname.get_password().expect("you havent configured a username yet, use 'artemis-cli config [USERNAME] [PASSWORD]' and try again"),
@@ -224,8 +212,7 @@ impl Adapter {
         let details_uri = format!("{}/api/exercises/{}/details", self.base_url, taskid);
         let text = self.fetch_json(&details_uri).await?.text().await?;
 
-        let (participation_id, result_id, build_failiure) =
-            Self::parse_exercise_details(&text).unwrap();
+        let (participation_id, result_id, build_failiure) = Self::parse_exercise_details(&text).unwrap();
 
         if build_failiure {
             let buildlogs_url = format!(
@@ -233,8 +220,7 @@ impl Adapter {
                 self.base_url, participation_id, result_id
             );
 
-            let buildlogs: Vec<LogStatement> =
-                self.fetch_json(&buildlogs_url).await?.json().await?;
+            let buildlogs: Vec<LogStatement> = self.fetch_json(&buildlogs_url).await?.json().await?;
 
             println!("{}", "BUILD FAILIURE:".red().bold());
             for log in buildlogs {
@@ -255,8 +241,7 @@ impl Adapter {
     }
 
     pub async fn srart_artemis_task(&mut self, taskid: u64) -> Result<String> {
-        let participations_url =
-            format!("{}/api/exercises/{}/participations", self.base_url, taskid);
+        let participations_url = format!("{}/api/exercises/{}/participations", self.base_url, taskid);
         let response = self
             .client
             .post(&participations_url)
@@ -326,9 +311,7 @@ impl Adapter {
             .as_array()
             .unwrap()
             .iter()
-            .fold(false, |acc, e| {
-                acc | (e.get("score").unwrap().as_f64().unwrap() == 100.0)
-            });
+            .fold(false, |acc, e| acc | (e.get("score").unwrap().as_f64().unwrap() == 100.0));
 
         let task = Task {
             title: task_title,
@@ -353,10 +336,7 @@ impl Adapter {
             tasks.push(Self::parse_task(raw_task).unwrap());
         }
 
-        let description = course.get("description").unwrap().to_string();
-
         Ok(Course {
-            description,
             id: course_id,
             title: course_title,
             tasks,
@@ -387,20 +367,11 @@ impl Adapter {
             let completion_time = result.get("completionDate").unwrap().as_str().unwrap();
             let timestamp = DateTime::parse_from_rfc3339(completion_time).unwrap();
 
-            let build_failiure = result
-                .get("submission")
-                .unwrap()
-                .get("buildFailed")
-                .unwrap()
-                .as_bool()
-                .unwrap();
+            let build_failiure = result.get("submission").unwrap().get("buildFailed").unwrap().as_bool().unwrap();
 
             submissions.push((timestamp, result_id, build_failiure));
         }
-        let (_, resutl_id, build_faliure) = submissions
-            .iter()
-            .max_by(|(ts1, _, _), (ts2, _, _)| ts1.cmp(ts2))
-            .unwrap();
+        let (_, resutl_id, build_faliure) = submissions.iter().max_by(|(ts1, _, _), (ts2, _, _)| ts1.cmp(ts2)).unwrap();
 
         Ok((participation_id, *resutl_id, *build_faliure))
     }
@@ -414,22 +385,13 @@ impl Adapter {
 
         for raw_test in raw_tests {
             let passed = raw_test.get("positive").unwrap().as_bool().unwrap();
-            let name = raw_test
-                .get("testCase")
-                .unwrap()
-                .get("testName")
-                .unwrap()
-                .to_string();
+            let name = raw_test.get("testCase").unwrap().get("testName").unwrap().to_string();
             let explanation = if !passed {
                 Some(raw_test.get("detailText").unwrap().to_string())
             } else {
                 None
             };
-            let test = Test {
-                name,
-                passed,
-                explanation,
-            };
+            let test = Test { name, passed, explanation };
             tests.push(test);
         }
 
