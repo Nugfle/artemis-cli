@@ -51,9 +51,7 @@ impl ArtemisConfig {
             Ok(f) => f,
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => {
-                    warn!(
-                        "config not found you might need to run 'artemis-cli config base-url [BASEURL]' first"
-                    );
+                    warn!("config not found you might need to run 'artemis-cli config base-url [BASEURL]' first");
                     Self::default().save(Some(cfg_path));
                     warn!(
                         "using default options: {:?} run 'artemis-cli config base-url [BASEURL]' first",
@@ -66,9 +64,7 @@ impl ArtemisConfig {
         };
 
         let mut buf = String::new();
-        cfg_file
-            .read_to_string(&mut buf)
-            .expect("cant read cfg file");
+        cfg_file.read_to_string(&mut buf).expect("cant read cfg file");
 
         toml::from_str::<ArtemisConfig>(&mut buf).expect("cant parse config")
     }
@@ -90,9 +86,7 @@ impl ArtemisConfig {
             .expect("unable to open config file");
 
         let cfg_str = toml::to_string(self).expect("cant Serialize config");
-        cfg_file
-            .write_all(cfg_str.as_bytes())
-            .expect("cant write to cfg file");
+        cfg_file.write_all(cfg_str.as_bytes()).expect("cant write to cfg file");
     }
 
     pub fn set_base_url(&mut self, base_url: String) {

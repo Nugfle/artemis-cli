@@ -16,9 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use anyhow::Result;
-use git2::{
-    Cred, FetchOptions, PushOptions, RemoteCallbacks, Repository, Signature, build::RepoBuilder,
-};
+use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Repository, Signature, build::RepoBuilder};
 use log::{info, trace};
 use std::{env, path::Path};
 
@@ -34,11 +32,7 @@ impl ArtemisRepo {
         let git_url_abs = url.split_once("//").unwrap().1;
         let git_url_rel = git_url_abs.replacen("/", ":", 1).replace("\"", "");
 
-        info!(
-            "start cloning: {} into {} ...",
-            git_url_rel,
-            path.to_str().unwrap()
-        );
+        info!("start cloning: {} into {} ...", git_url_rel, path.to_str().unwrap());
 
         let mut callbacks = RemoteCallbacks::new();
 
@@ -100,14 +94,9 @@ impl ArtemisRepo {
         let signature = Signature::now(&name, &email)?;
 
         trace!("running commit...");
-        let commit_id = self.repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "automated commit...",
-            &tree,
-            &[&parent],
-        )?;
+        let commit_id = self
+            .repo
+            .commit(Some("HEAD"), &signature, &signature, "automated commit...", &tree, &[&parent])?;
         info!("successfully commited {}", commit_id);
 
         Ok(())
@@ -119,9 +108,7 @@ impl ArtemisRepo {
 
         let mut callbacks = RemoteCallbacks::new();
         trace!("adding callback...");
-        callbacks.credentials(|_url, username_from_url, _allowed_types| {
-            Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
-        });
+        callbacks.credentials(|_url, username_from_url, _allowed_types| Cred::ssh_key_from_agent(username_from_url.unwrap_or("git")));
         callbacks.transfer_progress(|progress| {
             info!("Progress: {} Bytes", progress.received_bytes());
             true
@@ -132,10 +119,7 @@ impl ArtemisRepo {
         push_options.remote_callbacks(callbacks);
 
         trace!("pushing...");
-        remote.push(
-            &["refs/heads/main:refs/heads/main"],
-            Some(&mut push_options),
-        )?;
+        remote.push(&["refs/heads/main:refs/heads/main"], Some(&mut push_options))?;
 
         info!("successfully pushed to remote");
 

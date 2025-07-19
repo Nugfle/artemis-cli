@@ -92,10 +92,8 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
                 .srart_artemis_task(*taskid)
                 .await
                 .expect("couldnt start the task and fetch url");
-            let repo =
-                ArtemisRepo::create(&ssh_uri, *taskid).expect("couldn't create the repository");
-            repo.commit_and_push()
-                .expect("can't commit and push to remote repository");
+            let repo = ArtemisRepo::create(&ssh_uri, *taskid).expect("couldn't create the repository");
+            repo.commit_and_push().expect("can't commit and push to remote repository");
         }
         Commands::Submit { taskid } => {
             let repo = ArtemisRepo::open(env::current_dir()?)?;
@@ -107,12 +105,8 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
 
             for test_result in test_results {
                 println!(
-                    "{:<4} {:<60} {}",
-                    if test_result.passed {
-                        "P".bold().green()
-                    } else {
-                        "F".bold().red()
-                    },
+                    "{:<4} {:<40} {}",
+                    if test_result.passed { "P".bold().green() } else { "F".bold().red() },
                     test_result.name,
                     test_result.explanation.unwrap_or("".to_string()).red(),
                 )
@@ -124,15 +118,11 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
                 cfg.save(cli.cfg.as_deref());
             }
             ConfigCommands::Username { name } => {
-                let uname =
-                    Entry::new("artemiscli", "username").expect("can't create Entry for username");
-                uname
-                    .set_password(&name)
-                    .expect("can't create Entry for password");
+                let uname = Entry::new("artemiscli", "username").expect("can't create Entry for username");
+                uname.set_password(&name).expect("can't create Entry for password");
             }
             ConfigCommands::Password { password } => {
-                let pwd =
-                    Entry::new("artemiscli", "password").expect("can't create Entry for password");
+                let pwd = Entry::new("artemiscli", "password").expect("can't create Entry for password");
                 pwd.set_password(&password)?;
             }
         },
