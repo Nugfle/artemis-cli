@@ -6,12 +6,18 @@ ArtemisCLI gives you full control to start and manage exercises from your comman
 
 ## Getting started
 
+
 To get started you need to have [rust](https://www.rust-lang.org/) installed. You can then install the tool simply by running 
 ```
 cargo install artemis-cli
 ```
 
 ## Setup
+
+Make sure your ssh-agent is configured and running:
+```
+ssh-add -l
+```
 
 To set up your login information simply run 
 ```
