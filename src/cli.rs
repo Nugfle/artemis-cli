@@ -48,10 +48,7 @@ pub(crate) enum Commands {
         taskid: u64,
     },
     /// creates a commit, pushes to the repo and returns the test results
-    Submit {
-        /// the id of the task as given by list-task
-        taskid: u64,
-    },
+    Submit,
     /// fetches and prints the test results
     Fetch {
         /// the id of the task as given by list-task
