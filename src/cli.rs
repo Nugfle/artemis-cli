@@ -52,6 +52,11 @@ pub(crate) enum Commands {
         /// the id of the task as given by list-task
         taskid: u64,
     },
+    /// fetches and prints the test results
+    Fetch {
+        /// the id of the task as given by list-task
+        taskid: u64,
+    },
     /// sets the global configuration for login data
     Config {
         #[command(subcommand)]

@@ -138,7 +138,7 @@ impl Adapter {
             self.login().await?;
         }
         if !response.status().is_success() {
-            error!("coudn't fetch json from {}", uri);
+            error!("coudn't fetch json from {}: {}", uri, response.status());
             return Err(anyhow!("coudn't fetch json from {}", uri));
         }
         Ok(response)
@@ -149,8 +149,8 @@ impl Adapter {
         let pwd = Entry::new("artemiscli", "password").expect("cant create keyring entry for password");
 
         let auth = json!({
-            "username": uname.get_password().expect("you havent configured a username yet, use 'artemis-cli config [USERNAME] [PASSWORD]' and try again"),
-            "password": pwd.get_password().expect("you havent configured a password yet, use 'artemis-cli config [USERNAME] [PASSWORD]' and try again"),
+            "username": uname.get_password().expect("you havent configured a username yet, use 'artemis-cli config username [USERNAME]' and try again"),
+            "password": pwd.get_password().expect("you havent configured a password yet, use 'artemis-cli config password [PASSWORD]' and try again"),
             "rememberMe": true,
         });
 
