@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::{env, thread::sleep, time::Duration};
+use std::env;
 
 use anyhow::Result;
 use clap::Parser;
@@ -54,7 +54,7 @@ fn init_log(verbosity: u8) {
 async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
     match cli.command.as_ref().unwrap() {
         Commands::ListCourses => {
-            let mut s = Adapter::init(30, cfg.get_base_url()).await.unwrap();
+            let mut s = Adapter::init(30, cfg.get_base_url()).await;
 
             let courses = s.get_all_courses().await.unwrap();
             for course in courses {
@@ -62,7 +62,7 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
             }
         }
         Commands::ListTasks { courseid } => {
-            let mut s = Adapter::init(30, cfg.get_base_url()).await.unwrap();
+            let mut s = Adapter::init(30, cfg.get_base_url()).await;
 
             let courses = s.get_all_courses().await.unwrap();
             for course in courses {
@@ -85,9 +85,7 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
             }
         }
         Commands::StartTask { taskid } => {
-            let mut s = Adapter::init(30, cfg.get_base_url())
-                .await
-                .expect("adapter could not be started");
+            let mut s = Adapter::init(30, cfg.get_base_url()).await;
             let ssh_uri = s
                 .srart_artemis_task(*taskid)
                 .await
@@ -101,7 +99,7 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
             info!("successfully submited task");
         }
         Commands::Fetch { taskid } => {
-            let mut s = Adapter::init(30, cfg.get_base_url()).await?;
+            let mut s = Adapter::init(30, cfg.get_base_url()).await;
             let test_results = s.get_latest_test_result(*taskid).await?;
             for test_result in test_results {
                 println!(

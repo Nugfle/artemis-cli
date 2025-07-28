@@ -86,7 +86,7 @@ impl Display for LogStatement {
 }
 
 impl Adapter {
-    pub async fn init(timeout: u8, base_url: &str) -> Result<Self> {
+    pub async fn init(timeout: u8, base_url: &str) -> Self {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::USER_AGENT,
@@ -127,15 +127,20 @@ impl Adapter {
         if !restored_cookie {
             s.login().await.expect("Login failed");
         }
-
-        Ok(s)
+        s
     }
 
     async fn fetch_json(&mut self, uri: &str) -> Result<Response> {
-        let response = self.client.get(uri).header("Accept", "application/json").send().await?;
+        let response = self
+            .client
+            .get(uri)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .expect(&format!("can't send get request to: {}, do you have authorization?", uri));
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-            self.login().await?;
+            self.login().await.expect("login failed: ");
         }
         if !response.status().is_success() {
             error!("coudn't fetch json from {}: {}", uri, response.status());
@@ -172,7 +177,8 @@ impl Adapter {
                     self.cookies
                         .cookies(&reqwest::Url::parse(self.base_url.as_str()).unwrap())
                         .expect("no cookies found for artemis")
-                        .to_str()?,
+                        .to_str()
+                        .expect("cookies are invalid utf8"),
                 )
                 .expect("can't access keyring");
             Ok(())
@@ -210,7 +216,12 @@ impl Adapter {
 
     pub async fn get_latest_test_result(&mut self, taskid: u64) -> Result<Vec<Test>> {
         let details_uri = format!("{}/api/exercises/{}/details", self.base_url, taskid);
-        let text = self.fetch_json(&details_uri).await?.text().await?;
+        let text = self
+            .fetch_json(&details_uri)
+            .await
+            .inspect_err(|e| error!("can't fetch json from {}: {}", details_uri, e))?
+            .text()
+            .await?;
 
         let (participation_id, result_id, build_failiure) = Self::parse_exercise_details(&text).unwrap();
 
