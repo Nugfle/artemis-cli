@@ -4,6 +4,7 @@
 
 ArtemisCLI gives you full control to start and manage exercises from your command line. It has currently only been tested on Linux and with the Artemis server hosted by TU Dresden.
 
+
 ## Getting started
 
 
@@ -53,6 +54,6 @@ artemis-cli fetch [TASK ID]
 ```
 to automacily create a commit, push to the remote repository and fetch the updated test results for you.
 
-## Contributing
+## Development
 
-Feel free to contribute to this project, please note that this is a sideproject built out of annoyance with the current system and I wont be supporting it for longer than neccesary.
+**This project is officialy archieved and there will be no further development done**

@@ -87,7 +87,7 @@ async fn run_commands(cli: &Cli, cfg: &mut ArtemisConfig) -> Result<()> {
         Commands::StartTask { taskid } => {
             let mut s = Adapter::init(30, cfg.get_base_url()).await;
             let ssh_uri = s
-                .srart_artemis_task(*taskid)
+                .start_artemis_task(*taskid)
                 .await
                 .expect("couldnt start the task and fetch url");
             let repo = ArtemisRepo::create(&ssh_uri, *taskid).expect("couldn't create the repository");

@@ -144,7 +144,7 @@ impl Adapter {
         }
         if !response.status().is_success() {
             error!("coudn't fetch json from {}: {}", uri, response.status());
-            return Err(anyhow!("coudn't fetch json from {}", uri));
+            return Err(anyhow!("coudn't fetch json from {}: {}", uri, response.status()));
         }
         Ok(response)
     }
@@ -251,7 +251,7 @@ impl Adapter {
         Self::parse_test_result_details(test_result_text.to_owned())
     }
 
-    pub async fn srart_artemis_task(&mut self, taskid: u64) -> Result<String> {
+    pub async fn start_artemis_task(&mut self, taskid: u64) -> Result<String> {
         let participations_url = format!("{}/api/exercises/{}/participations", self.base_url, taskid);
         let response = self
             .client
